@@ -31,10 +31,19 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
+      - name: Run MAC unit tests
+        run: |
+          cd test/mac
+          make clean
+          make
+          python -m cocotb_tools.check_results results.xml
+
       - name: Test Summary
         uses: test-summary/action@v2.4
         with:
-          paths: "test/results.xml"
+          paths: |
+            test/results.xml
+            test/mac/results.xml
         if: always()
 
       - name: upload waveform and test results
@@ -45,4 +54,5 @@ jobs:
           path: |
             test/tb.fst
             test/results.xml
+            test/mac/results.xml
             test/output/*
