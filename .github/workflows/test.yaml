@@ -9,9 +9,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install iverilog
+      - name: Install iverilog and verilator
         shell: bash
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+
+      # The GDS flow stops on any Verilator warning, so check it here first (much faster).
+      - name: Lint with Verilator
+        run: |
+          verilator --lint-only -Wall -Wno-DECLFILENAME \
+            --top-module tt_um_jameshfj01_tiny_ai_chip \
+            src/mac.v src/systolic_2x2.v src/project.v
 
       # Set Python up and install cocotb
       - name: Setup python

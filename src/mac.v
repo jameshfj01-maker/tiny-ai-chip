@@ -38,13 +38,17 @@ module mac #(
   // 8비트 x 8비트 = 16비트. 두 입력이 signed 라서 부호 있는 곱셈이 된다.
   wire signed [2*DATA_W-1:0] product = a * b;
 
+  // 16비트 곱을 18비트로 늘린다. 맨 위 비트(부호)를 복사해서 채워야 음수가 그대로 음수로 남는다.
+  //   예: -12 = 1111_1111_1111_0100 (16비트) -> 11_1111_1111_1111_0100 (18비트)
+  wire signed [ACC_W-1:0] product_ext = {{(ACC_W - 2*DATA_W){product[2*DATA_W-1]}}, product};
+
   always @(posedge clk) begin
     if (!rst_n)
       acc <= {ACC_W{1'b0}};
     else if (clr)
       acc <= {ACC_W{1'b0}};
     else if (en)
-      acc <= acc + product;  // product 는 부호를 유지한 채 18비트로 늘어난 뒤 더해진다.
+      acc <= acc + product_ext;
   end
 
 endmodule

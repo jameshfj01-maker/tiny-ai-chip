@@ -53,13 +53,14 @@
 GitHub와 Claude Code 클라우드 세션만 쓴다. 컨테이너는 세션이 끝나면 사라지므로 새 세션마다 아래 설치를 다시 한다.
 
 - 시뮬레이터: Icarus Verilog 12.0 (Ubuntu 24.04 `apt` 패키지). GitHub Actions `test` 워크플로도 같은 방식으로 설치한다.
+- 린터: Verilator (`apt` 패키지). 하드닝(gds)은 Verilator 경고가 하나라도 있으면 멈추므로, 푸시 전에 꼭 린트를 돌린다.
 - Python: 프로젝트 안 `.venv` (Python 3.12, uv로 생성). cocotb 2.1.0, pytest 8.4.2.
 - 하드닝(LibreLane)은 설치하지 않고 GitHub Actions로 돌린다.
 
 ### 설치
 
 ```bash
-sudo apt-get update && sudo apt-get install -y iverilog
+sudo apt-get update && sudo apt-get install -y iverilog verilator
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -r test/requirements.txt
 ```
@@ -87,3 +88,12 @@ python -m cocotb_tools.check_results results.xml
 새 모듈 테스트 폴더를 만들면 `.github/workflows/test.yaml`의 "Run module unit tests" 목록에도 추가한다.
 
 `make`는 테스트가 실패해도 성공으로 끝날 수 있어서 마지막 줄로 결과를 꼭 확인한다.
+
+### 린트 (푸시 전에)
+
+```bash
+verilator --lint-only -Wall -Wno-DECLFILENAME --top-module tt_um_jameshfj01_tiny_ai_chip \
+  src/mac.v src/systolic_2x2.v src/project.v
+```
+
+새 소스 파일을 추가하면 이 명령과 `.github/workflows/test.yaml`의 "Lint with Verilator" 단계에도 추가한다.
