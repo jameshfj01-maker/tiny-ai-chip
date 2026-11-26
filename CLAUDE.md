@@ -32,7 +32,7 @@
 |---|---|---|
 | 0 | 환경 세팅 | 로컬에서 템플릿 기본 테스트 통과 (완료: 2026-11-26) |
 | 1 | MAC 유닛 (곱하고 누적하기) | `mac` 모듈 cocotb 테스트 통과, Claude가 설명 완료 (완료: 2026-11-26) |
-| 2 | 2x2 systolic array | MAC 4개를 연결, 2x2 행렬곱 결과를 테스트로 확인 |
+| 2 | 2x2 systolic array | MAC 4개를 연결, 2x2 행렬곱 결과를 테스트로 확인 (완료: 2026-11-26) |
 | 3 | Tiny Tapeout 래퍼 + 하드닝 | `tt_um_` 최상위 모듈, GitHub Actions의 gds / precheck / gl_test 통과 |
 | 4 | 제출 결정 | 비용과 셔틀 일정을 보고 제출할지 결정 (유료 단계) |
 
@@ -74,13 +74,15 @@ make -B
 python -m cocotb_tools.check_results results.xml
 ```
 
-MAC 유닛 테스트:
+모듈 단위 테스트 (`test/mac`, `test/systolic` 각각):
 
 ```bash
-cd test/mac
+cd test/mac          # 또는 test/systolic
 source ../../.venv/bin/activate
 make -B
 python -m cocotb_tools.check_results results.xml
 ```
+
+새 모듈 테스트 폴더를 만들면 `.github/workflows/test.yaml`의 "Run module unit tests" 목록에도 추가한다.
 
 `make`는 테스트가 실패해도 성공으로 끝날 수 있어서 마지막 줄로 결과를 꼭 확인한다.
