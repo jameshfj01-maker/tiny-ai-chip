@@ -45,6 +45,7 @@
 - 타일: `info.yaml`의 `tiles` 기본 "1x1" (약 167x108 um). 2x2 array가 안 들어가면 더 큰 타일이 필요하고, 타일이 클수록 제출 비용이 올라간다.
 - 핀 제한: 입력 8개(`ui_in`), 출력 8개(`uo_out`), 양방향 8개(`uio_*`). 8비트 데이터를 어떻게 넣고 뺄지 설계할 때 이 제한이 핵심 제약이다.
 - 최상위 모듈 이름은 `tt_um_`으로 시작해야 하고, 바꾸면 `info.yaml`, `test/tb.v`도 같이 바꾼다.
+- 현재 최상위 모듈: `tt_um_jameshfj01_tiny_ai_chip` (`src/project.v`). 핀 사용법은 `docs/info.md`에 있다.
 - 새 소스 파일을 추가하면 `info.yaml`의 `source_files`와 `test/Makefile`의 `PROJECT_SOURCES` 둘 다 업데이트한다.
 
 ## 개발 환경 (클라우드)
