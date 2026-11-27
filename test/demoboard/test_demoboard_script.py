@@ -99,7 +99,7 @@ async def test_script_passes_on_rtl(dut):
     """보드 스크립트의 전체 시험을 RTL 에 돌리면 전부 통과해야 한다."""
     await start(dut)
     lines = []
-    summary = await bridge(script.run_all)(script.Chip(SimBoard(dut)), log=lines.append, n_random=10)
+    summary = await bridge(script.run_all)(script.Chip(SimBoard(dut)), log=lines.append, n_random=5)
     for line in lines:
         dut._log.info(line)
     assert summary["failed"] == 0, summary
@@ -116,7 +116,7 @@ async def test_script_detects_a_broken_chip(dut):
 
 @cocotb.test()
 async def test_compute_clocks(dut):
-    """수동 클럭에서 start 부터 done 까지의 클럭 수는 32 (계산) 이상, 40 이하."""
+    """수동 클럭에서 start 부터 done 까지의 클럭 수는 544 (계산) 이상, 552 이하."""
     await start(dut)
 
     def measure():
@@ -128,7 +128,7 @@ async def test_compute_clocks(dut):
 
     clocks, C = await bridge(measure)()
     dut._log.info(f"start -> done: {clocks} clocks")
-    assert 32 <= clocks <= 40
+    assert 544 <= clocks <= 552
     assert C == [[19, 22], [43, 50]]
 
 

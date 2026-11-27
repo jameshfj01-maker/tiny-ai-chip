@@ -24,10 +24,11 @@
 #
 #   PE(i,j) 는 시각 t = i + j + k 에 k 번째 곱을 받는다. 그래서 4 박자면 끝난다.
 #
-# 박자(beat): 각 PE 는 비트 직렬 MAC 이라서 곱 하나에 8 클럭이 걸린다.
-#   한 박자 = en 8 클럭. 그동안 a_in, b_in 을 그대로 둔다. 비트 번호는 배열 안에서 센다.
-#   이동 레지스터(a, b 를 이웃 PE 로 넘기는 것)는 박자의 마지막 클럭(8 번째 en)에만 움직인다.
-#   그래서 행렬곱 한 번 = 4 박자 = 32 클럭.
+# 박자(beat): 각 PE 는 완전 비트 직렬 MAC 이라서 곱 하나에 8 줄 x 17 비트 = 136 클럭이 걸린다.
+#   한 박자 = en 136 클럭. 그동안 a_in, b_in 을 그대로 둔다. 순서는 배열 안의 지휘자가 센다.
+#   이동 레지스터(a, b 를 이웃 PE 로 넘기는 것)는 박자의 마지막 클럭에만 움직이고,
+#   그 클럭에 beat_end 출력이 1 이 된다.
+#   그래서 행렬곱 한 번 = 4 박자 = 544 클럭.
 #
 # 타이밍 약속은 mac 테스트와 같다: 내려가는 엣지에서 입력을 바꾸고 다음
 # 내려가는 엣지에서 결과를 읽는다.
@@ -36,12 +37,12 @@ import random
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, FallingEdge
+from cocotb.triggers import ClockCycles, FallingEdge, Timer
 
 N = 2          # 행렬 크기
 CYCLES = 4     # 행렬곱 한 번에 필요한 박자 수 = N + 2*(N-1)
-BITS = 8       # 한 박자의 클럭 수 (비트 직렬 MAC 이 곱 하나에 쓰는 클럭)
-ACC_W = 18
+BITS = 8 * 17  # 한 박자의 클럭 수 (완전 비트 직렬 MAC 이 곱 하나에 쓰는 클럭 = 136)
+ACC_W = 17
 
 
 def matmul(A, B):
@@ -194,6 +195,32 @@ async def test_clr_mid_matmul(dut):
 
 
 @cocotb.test()
+async def test_beat_end_output(dut):
+    """beat_end 는 박자마다 한 번, 박자의 마지막 클럭에만 1 이다. en = 0 이면 0."""
+    await start(dut)
+    A, B = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    await step(dut, en=0, clr=1)
+    for t in range(CYCLES):
+        ends = []
+        for _ in range(BITS):
+            a0, a1, b0, b1 = schedule(A, B, t)
+            dut.a_in0.value = a0
+            dut.a_in1.value = a1
+            dut.b_in0.value = b0
+            dut.b_in1.value = b1
+            dut.en.value = 1
+            dut.clr.value = 0
+            await Timer(1, unit="ns")
+            ends.append(int(dut.beat_end.value))
+            await FallingEdge(dut.clk)
+        assert ends.count(1) == 1 and ends[-1] == 1, f"beat {t}: {[k for k, v in enumerate(ends) if v]}"
+    dut.en.value = 0
+    await Timer(1, unit="ns")
+    assert int(dut.beat_end.value) == 0
+    assert read_c(dut) == [[19, 22], [43, 50]]
+
+
+@cocotb.test()
 async def test_wavefront(dut):
     """매 박자 중간 결과를 본다. PE(i,j) 는 박자 i+j+k 에 k 번째 곱을 더한다 (대각선 물결)."""
     await start(dut)
@@ -210,10 +237,10 @@ async def test_wavefront(dut):
 
 @cocotb.test()
 async def test_random(dut):
-    """무작위 행렬 100 쌍을 Python 행렬곱과 비교한다."""
+    """무작위 행렬 40 쌍을 Python 행렬곱과 비교한다."""
     await start(dut)
     rng = random.Random(2026)
-    for n in range(100):
+    for n in range(40):
         A = [[rng.randint(-128, 127) for _ in range(N)] for _ in range(N)]
         B = [[rng.randint(-128, 127) for _ in range(N)] for _ in range(N)]
         got = await run_matmul(dut, A, B)

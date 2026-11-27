@@ -5,7 +5,7 @@
  * mac: 곱하고 누적하기 (Multiply-ACcumulate). 병렬 곱셈기 버전.
  *
  * 참고용: 지금 칩에는 들어가지 않는다 (info.yaml 의 source_files 에 없음).
- * 곱셈기 4개가 1x1 타일에 안 들어가서, 칩에는 더 작은 mac_serial.v (비트 직렬) 를 쓴다.
+ * 곱셈기 4개가 1x1 타일에 안 들어가서, 칩에는 훨씬 작은 mac_bitserial.v (완전 비트 직렬) 를 쓴다.
  * 이 파일과 test/mac 테스트는 비교용으로 남겨 둔다.
  *
  *   a (8비트) ──┐

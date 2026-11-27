@@ -4,7 +4,7 @@ SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../../src
 
-VERILOG_SOURCES += $(SRC_DIR)/project.v $(SRC_DIR)/systolic_2x2.v $(SRC_DIR)/mac_serial.v
+VERILOG_SOURCES += $(SRC_DIR)/project.v $(SRC_DIR)/systolic_2x2.v $(SRC_DIR)/bitserial_seq.v $(SRC_DIR)/mac_bitserial.v
 VERILOG_SOURCES += $(PWD)/../tb.v
 COCOTB_TOPLEVEL = tb
 COCOTB_TEST_MODULES = test_demoboard_script

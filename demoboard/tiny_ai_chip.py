@@ -28,7 +28,8 @@ UIO_PICO_OUTPUTS = 0x7F
 UIO_CHIP_OUTPUTS = 0x80  # 칩의 uio_oe 가 이 값이어야 한다
 
 HOLD_CLOCKS = 4          # write / start 를 유지하는 클럭 수 (칩 안 동기화 2 클럭 + 여유)
-DONE_TIMEOUT = 200       # done 을 기다리는 최대 클럭 수 (정상은 약 36)
+COMPUTE_CLOCKS = 544     # 계산 클럭 수: 4 박자 x 136 클럭 (완전 비트 직렬 MAC)
+DONE_TIMEOUT = 1000      # done 을 기다리는 최대 횟수 (정상은 약 548 클럭)
 
 
 def matmul_ref(A, B):
@@ -162,7 +163,8 @@ def run_all(chip, log=print, n_random=20, check_clocks=None):
     chip.load([[1, 2], [3, 4]], [[5, 6], [7, 8]])
     clocks = chip.run()
     if check_clocks:
-        check("start -> done 클럭 수 32..40", 32 <= clocks <= 40, "clocks=%d" % clocks)
+        check("start -> done 클럭 수 %d..%d" % (COMPUTE_CLOCKS, COMPUTE_CLOCKS + 8),
+              COMPUTE_CLOCKS <= clocks <= COMPUTE_CLOCKS + 8, "clocks=%d" % clocks)
     else:
         log("INFO  start -> done 대기 %d 번" % clocks)
     check("done 이 1 로 유지", chip.done())

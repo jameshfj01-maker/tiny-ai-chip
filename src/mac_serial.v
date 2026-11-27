@@ -2,7 +2,11 @@
  * Copyright (c) 2026 jameshfj01-maker
  * SPDX-License-Identifier: Apache-2.0
  *
- * mac_serial: 비트 직렬 MAC (곱하고 누적하기).
+ * mac_serial: 비트 직렬 MAC (곱하고 누적하기). 한 클럭에 b 의 비트 하나 (18비트 덧셈기 1개).
+ *
+ * 참고용: 지금 칩에는 들어가지 않는다 (info.yaml 의 source_files 에 없음).
+ * 1x1 타일에 넣으려고 칩에는 더 작은 mac_bitserial.v (1비트 전가산기 하나) 를 쓴다.
+ * 이 파일과 test/mac_serial 테스트는 비교용으로 남겨 둔다.
  *
  * a * b 를 한 번에 곱하지 않고, 손으로 하는 세로 곱셈처럼 b 의 비트 하나씩
  * 8 클럭에 나눠서 더한다. 큰 곱셈기 대신 덧셈기 하나만 있으면 돼서 작다.

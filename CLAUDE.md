@@ -70,6 +70,13 @@
   max slew 경고: nom_tt 22개에서 0개, max_ss 535개에서 481개 (가장 나쁜 코너에만 남음).
   사용률 58.5% (표준 셀 20,026 um², 플립플롭 196개). 지금 가장 느린 경로는 칩 바깥 핀(uio_in 주소)에서 읽기 선택기를 지나 uo_out 핀으로 가는 경로다.
   결론: 제출 후보는 이 설계와 1x2 타일 (2타일).
+- 2026-11-27: 사용자 요청으로 1x1 타일에 넣기 시도. MAC 을 완전 비트 직렬 (`src/mac_bitserial.v`) 로 바꿨다.
+  acc 17비트 시프트 레지스터 + 1비트 전가산기 1개 + 올림수 플립플롭. 한 바퀴(17클럭)에 세로 곱셈 한 줄, 곱 하나에 136클럭, 행렬곱 한 번에 544클럭 (50MHz 에서 약 11us).
+  비트 순서는 공유 순서 지휘자 `src/bitserial_seq.v` 하나가 정한다 (경로가 짧아서 팬아웃 문제가 다시 생기지 않을 것으로 봄).
+  acc 는 18비트에서 17비트로 줄였다 (2x2 의 한 칸은 곱 2개의 합: -32512 ~ 32768).
+  Yosys 일반 게이트: 1,240개에서 670개 (논리 1,044개에서 484개, 플립플롭 196개에서 186개). 이전 하드닝 비율로 추정한 면적 약 9,200 um².
+  1x1 에서는 배치 단계가 핀 수에 따른 여유 면적을 더하므로, 기본 목표 밀도 60% 를 넘을 수 있다. 첫 하드닝 결과를 보고 `src/config.json` 의 `PL_TARGET_DENSITY_PCT` 를 올릴지 정한다.
+  병렬 버전 `src/mac_serial.v` 와 `test/mac_serial` 은 비교용으로 남기고 칩 소스에서는 뺐다. 1x2 버전은 커밋 c011723 에 있다.
 - `viewer` 작업은 GitHub Pages가 꺼져 있어서 실패한다. 칩 3D 미리보기용이고 제출에는 필요 없다. 켜려면 저장소 Settings, Pages, Source를 "GitHub Actions"로 바꾼다.
 
 ## 저장소 정보 (템플릿에서 확인한 사실)
@@ -82,7 +89,7 @@
 - 핀 제한: 입력 8개(`ui_in`), 출력 8개(`uo_out`), 양방향 8개(`uio_*`). 8비트 데이터를 어떻게 넣고 뺄지 설계할 때 이 제한이 핵심 제약이다.
 - 최상위 모듈 이름은 `tt_um_`으로 시작해야 하고, 바꾸면 `info.yaml`, `test/tb.v`도 같이 바꾼다.
 - 현재 최상위 모듈: `tt_um_jameshfj01_tiny_ai_chip` (`src/project.v`). 핀 사용법은 `docs/info.md`에 있다.
-- 칩 소스 파일: `src/project.v`, `src/systolic_2x2.v`, `src/mac_serial.v`. (`src/mac.v`는 참고용, 칩에 안 들어감)
+- 칩 소스 파일: `src/project.v`, `src/systolic_2x2.v`, `src/bitserial_seq.v`, `src/mac_bitserial.v`. (`src/mac.v`, `src/mac_serial.v`는 참고용, 칩에 안 들어감)
 - 데모 보드 시험: `demoboard/README.md` (칩이 왔을 때 할 순서), `demoboard/tiny_ai_chip.py` (MicroPython 스크립트). 스크립트는 `test/demoboard`에서 RTL에 연결해 확인한다. 핀 사용법을 바꾸면 이 스크립트도 같이 바꾼다.
 - 새 소스 파일을 추가하면 `info.yaml`의 `source_files`와 `test/Makefile`의 `PROJECT_SOURCES` 둘 다 업데이트한다.
 
@@ -114,10 +121,10 @@ make -B
 python -m cocotb_tools.check_results results.xml
 ```
 
-모듈 단위 테스트 (`test/mac`, `test/mac_serial`, `test/systolic`, `test/demoboard` 각각):
+모듈 단위 테스트 (`test/mac`, `test/mac_serial`, `test/mac_bitserial`, `test/systolic`, `test/demoboard` 각각):
 
 ```bash
-cd test/mac_serial   # 또는 test/mac, test/systolic
+cd test/mac_bitserial   # 또는 test/mac, test/mac_serial, test/systolic, test/demoboard
 source ../../.venv/bin/activate
 make -B
 python -m cocotb_tools.check_results results.xml
@@ -131,7 +138,7 @@ python -m cocotb_tools.check_results results.xml
 
 ```bash
 verilator --lint-only -Wall -Wno-DECLFILENAME --top-module tt_um_jameshfj01_tiny_ai_chip \
-  src/mac_serial.v src/systolic_2x2.v src/project.v
+  src/bitserial_seq.v src/mac_bitserial.v src/systolic_2x2.v src/project.v
 ```
 
 새 소스 파일을 추가하면 이 명령과 `.github/workflows/test.yaml`의 "Lint with Verilator" 단계에도 추가한다.
