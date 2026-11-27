@@ -41,7 +41,7 @@
 1. Tiny Tapeout 사이트 (tinytapeout.com/chips) 에서 새 SKY130 셔틀 이름, 마감일, 칩 도착 예정일을 확인한다.
 2. 새 셔틀용 템플릿에서 바뀐 점을 확인하고 맞춘다: `.github/workflows/*.yaml` 의 `tt-gds-action@ttsky26d` 태그, `info.yaml` 의 `yaml_version`, `src/config.json`.
 3. 하드닝을 다시 돌려서 gds / precheck / gl_test 통과와 타이밍 (모든 코너 setup 여유가 양수인지) 을 확인한다.
-4. 사용자가 계산기 (app.tinytapeout.com/calculator) 로 1x2 (2타일) 가격과 칩/보드 가격을 확인하고, 제출 여부를 정한다. 결제와 제출은 사용자가 직접 한다.
+4. 사용자가 계산기 (app.tinytapeout.com/calculator) 로 1x1 (1타일) 가격과 칩/보드 가격을 확인하고, 제출 여부를 정한다. 결제와 제출은 사용자가 직접 한다.
 
 ### 타일 결정 기록
 
@@ -77,6 +77,11 @@
   Yosys 일반 게이트: 1,240개에서 670개 (논리 1,044개에서 484개, 플립플롭 196개에서 186개). 이전 하드닝 비율로 추정한 면적 약 9,200 um².
   1x1 에서는 배치 단계가 핀 수에 따른 여유 면적을 더하므로, 기본 목표 밀도 60% 를 넘을 수 있다. 첫 하드닝 결과를 보고 `src/config.json` 의 `PL_TARGET_DENSITY_PCT` 를 올릴지 정한다.
   병렬 버전 `src/mac_serial.v` 와 `test/mac_serial` 은 비교용으로 남기고 칩 소스에서는 뺐다. 1x2 버전은 커밋 c011723 에 있다.
+- 2026-11-27: 완전 비트 직렬 버전 1x1 하드닝 성공 (설정 변경 없이 기본 목표 밀도 60% 로 통과). gds / precheck / gl_test 통과, DRC, LVS, 안테나 오류 없음.
+  표준 셀 면적 13,240 um² (논리 5,582 + 플립플롭 186개 3,956 + 타이밍 버퍼 2,285 + 클럭 버퍼 1,091 등), 코어 16,493 um², 사용률 80.3%.
+  setup 여유: max_ss +3.56ns, nom_ss +3.73ns, min_ss +3.92ns, nom_tt +7.63ns (1x2 때보다 더 좋다). setup 위반 0, hold 위반 0.
+  max slew 경고: max_ss 481개에서 286개, nom_tt 0개. 가장 느린 경로는 여전히 핀(uio_in 주소) 에서 읽기 선택기를 지나 uo_out 핀으로 가는 경로다.
+  결론: 제출 후보는 이 설계와 1x1 타일 (1타일, 1x2 의 절반 비용). 대가는 계산 시간 (36 클럭에서 548 클럭, 50MHz 에서 약 11us). 1x2 버전은 커밋 c011723.
 - `viewer` 작업은 GitHub Pages가 꺼져 있어서 실패한다. 칩 3D 미리보기용이고 제출에는 필요 없다. 켜려면 저장소 Settings, Pages, Source를 "GitHub Actions"로 바꾼다.
 
 ## 저장소 정보 (템플릿에서 확인한 사실)
