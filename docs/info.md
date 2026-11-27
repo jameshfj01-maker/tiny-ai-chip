@@ -60,6 +60,9 @@ Example: A = [[1, 2], [3, 4]], B = [[5, 6], [7, 8]] gives C = [[19, 22], [43, 50
 
 Writes and starts are ignored while the array is computing.
 
+A MicroPython test script for the Tiny Tapeout demo board is in `demoboard/tiny_ai_chip.py`
+(run `import tiny_ai_chip; tiny_ai_chip.main()` on the board). See `demoboard/README.md`.
+
 ## External hardware
 
 None. The Tiny Tapeout demo board (RP2040) can drive the inputs and read the outputs.

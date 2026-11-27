@@ -40,7 +40,7 @@ jobs:
 
       - name: Run module unit tests
         run: |
-          for dir in test/mac test/mac_serial test/systolic; do
+          for dir in test/mac test/mac_serial test/systolic test/demoboard; do
             echo "=== $dir ==="
             (cd $dir && make clean && make && python -m cocotb_tools.check_results results.xml)
           done
@@ -53,6 +53,7 @@ jobs:
             test/mac/results.xml
             test/mac_serial/results.xml
             test/systolic/results.xml
+            test/demoboard/results.xml
         if: always()
 
       - name: upload waveform and test results
@@ -66,4 +67,5 @@ jobs:
             test/mac/results.xml
             test/mac_serial/results.xml
             test/systolic/results.xml
+            test/demoboard/results.xml
             test/output/*
