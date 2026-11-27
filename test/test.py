@@ -29,7 +29,8 @@ WRITE = 1 << 4
 START = 1 << 5
 DONE = 1 << 7
 HOLD = 4          # write/start 를 유지하는 클럭 수 (동기화 2클럭 + 여유)
-DONE_TIMEOUT = 50
+DONE_TIMEOUT = 100
+COMPUTE_CLOCKS = 32   # 4 박자 x 8 클럭 (비트 직렬 MAC)
 
 
 def matmul(A, B):
@@ -143,7 +144,7 @@ async def test_done_behaviour(dut):
     assert not done(dut)
     dut.uio_in.value = START
     seen_done = False
-    for _ in range(40):
+    for _ in range(80):
         await FallingEdge(dut.clk)
         if done(dut):
             seen_done = True
@@ -152,6 +153,23 @@ async def test_done_behaviour(dut):
     assert seen_done
     dut.uio_in.value = 0
     assert await read_c(dut) == [[2, 2], [2, 2]]
+
+
+@cocotb.test()
+async def test_compute_time(dut):
+    """start 부터 done 까지 걸리는 클럭 수: 계산 32 클럭 + 동기화 몇 클럭."""
+    await start_chip(dut)
+    await load(dut, [[1, 2], [3, 4]], [[5, 6], [7, 8]])
+    dut.uio_in.value = START
+    clocks = 0
+    while not done(dut):
+        await FallingEdge(dut.clk)
+        clocks += 1
+        assert clocks <= DONE_TIMEOUT, "done 이 올라오지 않았다"
+    dut.uio_in.value = 0
+    dut._log.info(f"start -> done: {clocks} clocks")
+    assert COMPUTE_CLOCKS <= clocks <= COMPUTE_CLOCKS + 6
+    assert await read_c(dut) == [[19, 22], [43, 50]]
 
 
 @cocotb.test()

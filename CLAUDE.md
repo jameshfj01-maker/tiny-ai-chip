@@ -43,6 +43,10 @@
 - 2026-11-27: 2x2 타일로 gds / precheck / gl_test 통과. DRC, LVS 오류 없음, hold 위반 없음.
   단, 가장 느린 조건(ss, 100도, 1.60V) 3개 코너에서 50MHz setup 위반 경고가 있다. 원인은 8비트 곱셈 + 18비트 덧셈이 한 클럭 안에 있는 긴 경로로 보인다.
   비트 직렬 MAC으로 바꾸면 이 긴 경로가 없어지므로, 바꾼 뒤 타이밍을 다시 확인한다.
+- 2026-11-27: 비트 직렬 MAC (`src/mac_serial.v`) 으로 교체. 곱 하나에 8클럭, 행렬곱 한 번에 32클럭.
+  Yosys 일반 게이트 기준 2,813개에서 1,196개로 줄었다 (논리 게이트 2,635개에서 1,015개, 플립플롭은 약 180개로 그대로).
+  추정 면적 약 14,700 um²: 1x1 (약 16,500 um²) 은 너무 빠듯하고, 1x2 (약 34,000 um²) 는 여유가 있다. 그래서 `tiles: "1x2"`로 하드닝을 시도한다.
+  병렬 버전 `src/mac.v`와 `test/mac`은 비교용으로 남기고 칩 소스에서는 뺐다.
 - `viewer` 작업은 GitHub Pages가 꺼져 있어서 실패한다. 칩 3D 미리보기용이고 제출에는 필요 없다. 켜려면 저장소 Settings, Pages, Source를 "GitHub Actions"로 바꾼다.
 
 ## 저장소 정보 (템플릿에서 확인한 사실)
@@ -55,6 +59,7 @@
 - 핀 제한: 입력 8개(`ui_in`), 출력 8개(`uo_out`), 양방향 8개(`uio_*`). 8비트 데이터를 어떻게 넣고 뺄지 설계할 때 이 제한이 핵심 제약이다.
 - 최상위 모듈 이름은 `tt_um_`으로 시작해야 하고, 바꾸면 `info.yaml`, `test/tb.v`도 같이 바꾼다.
 - 현재 최상위 모듈: `tt_um_jameshfj01_tiny_ai_chip` (`src/project.v`). 핀 사용법은 `docs/info.md`에 있다.
+- 칩 소스 파일: `src/project.v`, `src/systolic_2x2.v`, `src/mac_serial.v`. (`src/mac.v`는 참고용, 칩에 안 들어감)
 - 새 소스 파일을 추가하면 `info.yaml`의 `source_files`와 `test/Makefile`의 `PROJECT_SOURCES` 둘 다 업데이트한다.
 
 ## 개발 환경 (클라우드)
@@ -85,10 +90,10 @@ make -B
 python -m cocotb_tools.check_results results.xml
 ```
 
-모듈 단위 테스트 (`test/mac`, `test/systolic` 각각):
+모듈 단위 테스트 (`test/mac`, `test/mac_serial`, `test/systolic` 각각):
 
 ```bash
-cd test/mac          # 또는 test/systolic
+cd test/mac_serial   # 또는 test/mac, test/systolic
 source ../../.venv/bin/activate
 make -B
 python -m cocotb_tools.check_results results.xml
@@ -102,7 +107,7 @@ python -m cocotb_tools.check_results results.xml
 
 ```bash
 verilator --lint-only -Wall -Wno-DECLFILENAME --top-module tt_um_jameshfj01_tiny_ai_chip \
-  src/mac.v src/systolic_2x2.v src/project.v
+  src/mac_serial.v src/systolic_2x2.v src/project.v
 ```
 
 새 소스 파일을 추가하면 이 명령과 `.github/workflows/test.yaml`의 "Lint with Verilator" 단계에도 추가한다.

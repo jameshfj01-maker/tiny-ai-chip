@@ -12,7 +12,7 @@
  *   uio_in[5] ──► start ─[동기화]──► [ 지휘자(상태 기계) ] ──► 비스듬히 밀어 넣기
  *                                                 │                 │
  *   uio_out[7] ◄── done ◄─────────────────────────┘                 v
- *                                                        [ systolic_2x2 (MAC 4개) ]
+ *                                                [ systolic_2x2 (비트 직렬 MAC 4개) ]
  *                                                                   │
  *   uo_out[7:0] ◄── 주소로 고른 결과 바이트 ◄── [ 읽기 선택기 ] ◄────┘
  *
@@ -24,6 +24,8 @@
  * write, start 는 칩 바깥에서 클럭과 상관없이 바뀌는 신호라서 플립플롭 2개로
  * 동기화한 뒤, 0 -> 1 로 바뀌는 순간(상승 엣지)에 한 번만 동작한다.
  * 계산 중(busy)에는 write 와 start 를 무시한다.
+ *
+ * 계산 시간: 4 박자 x 8 클럭 = 32 클럭 (비트 직렬 MAC 이 곱 하나에 8 클럭을 쓴다).
  */
 
 `default_nettype none
@@ -65,11 +67,19 @@ module tt_um_jameshfj01_tiny_ai_chip (
   wire start_rise = start_sync[1] & ~start_sync[2];
 
   // ---------------------------------------------------------------
-  // 2. 지휘자: start 가 오면 한 클럭 clr, 그다음 4 클럭 동안 en
+  // 2. 지휘자: start 가 오면 한 클럭 clr, 그다음 32 클럭 동안 en
+  //
+  //    5비트 카운터 cnt 하나로 박자와 비트를 같이 센다:
+  //      cnt[4:3] = t       (박자 번호 0..3)
+  //      cnt[2:0] = bit_idx (박자 안의 클럭 번호 0..7)
+  //    cnt 가 0 부터 31 까지 올라가면 4 박자 x 8 클럭이 끝난다.
   // ---------------------------------------------------------------
   reg       busy;
   reg       done;
-  reg [1:0] t;  // 지금 몇 번째 클럭인지 (0..3)
+  reg [4:0] cnt;
+
+  wire [1:0] t       = cnt[4:3];
+  wire [2:0] bit_idx = cnt[2:0];
 
   wire go = start_rise & ~busy;
 
@@ -77,14 +87,14 @@ module tt_um_jameshfj01_tiny_ai_chip (
     if (!rst_n) begin
       busy <= 1'b0;
       done <= 1'b0;
-      t    <= 2'd0;
+      cnt  <= 5'd0;
     end else if (go) begin
       busy <= 1'b1;
       done <= 1'b0;
-      t    <= 2'd0;
+      cnt  <= 5'd0;
     end else if (busy) begin
-      t <= t + 2'd1;
-      if (t == 2'd3) begin
+      cnt <= cnt + 5'd1;
+      if (cnt == 5'd31) begin
         busy <= 1'b0;
         done <= 1'b1;
       end
@@ -117,7 +127,8 @@ module tt_um_jameshfj01_tiny_ai_chip (
   end
 
   // ---------------------------------------------------------------
-  // 4. 비스듬히 밀어 넣기: 시각 t 에 a_in[i] = A[i][t-i], b_in[j] = B[t-j][j]
+  // 4. 비스듬히 밀어 넣기: 박자 t 에 a_in[i] = A[i][t-i], b_in[j] = B[t-j][j]
+  //    (한 박자 8 클럭 동안 같은 값을 유지한다)
   //
   //    t:      0     1     2     3
   //    a_in0: A00   A01    0     0
@@ -137,6 +148,7 @@ module tt_um_jameshfj01_tiny_ai_chip (
       .rst_n(rst_n),
       .en   (busy),
       .clr  (go),
+      .bit_idx(bit_idx),
       .a_in0(a_in0),
       .a_in1(a_in1),
       .b_in0(b_in0),

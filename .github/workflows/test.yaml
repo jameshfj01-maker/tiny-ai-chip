@@ -18,7 +18,7 @@ jobs:
         run: |
           verilator --lint-only -Wall -Wno-DECLFILENAME \
             --top-module tt_um_jameshfj01_tiny_ai_chip \
-            src/mac.v src/systolic_2x2.v src/project.v
+            src/mac_serial.v src/systolic_2x2.v src/project.v
 
       # Set Python up and install cocotb
       - name: Setup python
@@ -40,7 +40,7 @@ jobs:
 
       - name: Run module unit tests
         run: |
-          for dir in test/mac test/systolic; do
+          for dir in test/mac test/mac_serial test/systolic; do
             echo "=== $dir ==="
             (cd $dir && make clean && make && python -m cocotb_tools.check_results results.xml)
           done
@@ -51,6 +51,7 @@ jobs:
           paths: |
             test/results.xml
             test/mac/results.xml
+            test/mac_serial/results.xml
             test/systolic/results.xml
         if: always()
 
@@ -63,5 +64,6 @@ jobs:
             test/tb.fst
             test/results.xml
             test/mac/results.xml
+            test/mac_serial/results.xml
             test/systolic/results.xml
             test/output/*
