@@ -34,7 +34,14 @@
 | 1 | MAC 유닛 (곱하고 누적하기) | `mac` 모듈 cocotb 테스트 통과, Claude가 설명 완료 (완료: 2026-11-26) |
 | 2 | 2x2 systolic array | MAC 4개를 연결, 2x2 행렬곱 결과를 테스트로 확인 (완료: 2026-11-26) |
 | 3 | Tiny Tapeout 래퍼 + 하드닝 | `tt_um_` 최상위 모듈, GitHub Actions의 gds / precheck / gl_test 통과 (완료: 2026-11-27, 2x2 타일) |
-| 4 | 제출 결정 | 비용과 셔틀 일정을 보고 제출할지 결정 (유료 단계) |
+| 4 | 제출 결정 | 비용과 셔틀 일정을 보고 제출할지 결정 (유료 단계). 2026-11-27 결정: TTSKY26d/e (마감 2026-11-30) 는 건너뛰고 다음 셔틀을 기다린다 |
+
+### 다음 셔틀이 열리면 할 일
+
+1. Tiny Tapeout 사이트 (tinytapeout.com/chips) 에서 새 SKY130 셔틀 이름, 마감일, 칩 도착 예정일을 확인한다.
+2. 새 셔틀용 템플릿에서 바뀐 점을 확인하고 맞춘다: `.github/workflows/*.yaml` 의 `tt-gds-action@ttsky26d` 태그, `info.yaml` 의 `yaml_version`, `src/config.json`.
+3. 하드닝을 다시 돌려서 gds / precheck / gl_test 통과와 타이밍 (모든 코너 setup 여유가 양수인지) 을 확인한다.
+4. 사용자가 계산기 (app.tinytapeout.com/calculator) 로 1x2 (2타일) 가격과 칩/보드 가격을 확인하고, 제출 여부를 정한다. 결제와 제출은 사용자가 직접 한다.
 
 ### 타일 결정 기록
 
