@@ -25,8 +25,8 @@
 #   PE(i,j) 는 시각 t = i + j + k 에 k 번째 곱을 받는다. 그래서 4 박자면 끝난다.
 #
 # 박자(beat): 각 PE 는 비트 직렬 MAC 이라서 곱 하나에 8 클럭이 걸린다.
-#   한 박자 = 8 클럭. 그동안 a_in, b_in 을 그대로 두고 bit_idx 를 0..7 로 돌린다.
-#   이동 레지스터(a, b 를 이웃 PE 로 넘기는 것)는 박자의 마지막 클럭(bit_idx = 7)에만 움직인다.
+#   한 박자 = en 8 클럭. 그동안 a_in, b_in 을 그대로 둔다. 비트 번호는 배열 안에서 센다.
+#   이동 레지스터(a, b 를 이웃 PE 로 넘기는 것)는 박자의 마지막 클럭(8 번째 en)에만 움직인다.
 #   그래서 행렬곱 한 번 = 4 박자 = 32 클럭.
 #
 # 타이밍 약속은 mac 테스트와 같다: 내려가는 엣지에서 입력을 바꾸고 다음
@@ -70,7 +70,7 @@ def read_c(dut):
 
 async def start(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
-    for name in ("en", "clr", "bit_idx", "a_in0", "a_in1", "b_in0", "b_in1"):
+    for name in ("en", "clr", "a_in0", "a_in1", "b_in0", "b_in1"):
         getattr(dut, name).value = 0
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 3)
@@ -78,7 +78,7 @@ async def start(dut):
     dut.rst_n.value = 1
 
 
-async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0, bit=0):
+async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0):
     """클럭 한 번."""
     dut.a_in0.value = a0
     dut.a_in1.value = a1
@@ -86,14 +86,13 @@ async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0, bit=0):
     dut.b_in1.value = b1
     dut.en.value = en
     dut.clr.value = clr
-    dut.bit_idx.value = bit
     await FallingEdge(dut.clk)
 
 
 async def beat(dut, a0, a1, b0, b1):
-    """박자 한 번: 같은 입력을 8 클럭 동안 두고 bit_idx 를 0..7 로 돌린다."""
-    for bit in range(BITS):
-        await step(dut, a0, a1, b0, b1, en=1, bit=bit)
+    """박자 한 번: 같은 입력을 en 8 클럭 동안 둔다."""
+    for _ in range(BITS):
+        await step(dut, a0, a1, b0, b1, en=1)
 
 
 async def run_matmul(dut, A, B):
@@ -161,14 +160,14 @@ async def test_back_to_back(dut):
 @cocotb.test()
 async def test_stall(dut):
     """비트마다 en=0 으로 멈췄다가 이어가도 결과가 같다.
-    멈춘 동안 입력에 쓰레기가 있고 bit_idx 가 7 이어도 무시해야 한다 (이동 레지스터도 그대로)."""
+    멈춘 동안 입력에 쓰레기가 있어도 무시해야 한다 (카운터와 이동 레지스터도 그대로)."""
     await start(dut)
     A, B = [[3, -5], [11, 2]], [[-4, 6], [1, 9]]
     await step(dut, en=0, clr=1)
     for t in range(CYCLES):
-        for bit in range(BITS):
-            await step(dut, *schedule(A, B, t), en=1, bit=bit)
-            await step(dut, 99, -99, 55, -55, en=0, bit=7)
+        for _ in range(BITS):
+            await step(dut, *schedule(A, B, t), en=1)
+            await step(dut, 99, -99, 55, -55, en=0)
     assert read_c(dut) == matmul(A, B)
 
 
@@ -179,6 +178,19 @@ async def test_pass_registers_move_once_per_beat(dut):
     await start(dut)
     A, B = [[2, 0], [0, 0]], [[0, 3], [0, 0]]
     assert await run_matmul(dut, A, B) == [[0, 6], [0, 0]]
+
+
+@cocotb.test()
+async def test_clr_mid_matmul(dut):
+    """계산 도중(1.5 박자 뒤)에 clr 하고 새로 시작해도 결과가 맞다 (카운터와 이동 레지스터가 다 지워진다)."""
+    await start(dut)
+    A1, B1 = [[-128, 127], [5, 6]], [[7, -8], [9, 10]]
+    await step(dut, en=0, clr=1)
+    await beat(dut, *schedule(A1, B1, 0))
+    for _ in range(4):
+        await step(dut, *schedule(A1, B1, 1), en=1)
+    A2, B2 = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    assert await run_matmul(dut, A2, B2) == [[19, 22], [43, 50]]
 
 
 @cocotb.test()

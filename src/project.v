@@ -69,17 +69,16 @@ module tt_um_jameshfj01_tiny_ai_chip (
   // ---------------------------------------------------------------
   // 2. 지휘자: start 가 오면 한 클럭 clr, 그다음 32 클럭 동안 en
   //
-  //    5비트 카운터 cnt 하나로 박자와 비트를 같이 센다:
-  //      cnt[4:3] = t       (박자 번호 0..3)
-  //      cnt[2:0] = bit_idx (박자 안의 클럭 번호 0..7)
+  //    5비트 카운터 cnt 하나로 박자와 클럭을 같이 센다:
+  //      cnt[4:3] = t (박자 번호 0..3)
+  //      cnt[2:0]     (박자 안의 클럭 번호 0..7, 여기서는 쓰지 않는다. MAC 들이 각자 센다)
   //    cnt 가 0 부터 31 까지 올라가면 4 박자 x 8 클럭이 끝난다.
   // ---------------------------------------------------------------
   reg       busy;
   reg       done;
   reg [4:0] cnt;
 
-  wire [1:0] t       = cnt[4:3];
-  wire [2:0] bit_idx = cnt[2:0];
+  wire [1:0] t = cnt[4:3];
 
   wire go = start_rise & ~busy;
 
@@ -148,7 +147,6 @@ module tt_um_jameshfj01_tiny_ai_chip (
       .rst_n(rst_n),
       .en   (busy),
       .clr  (go),
-      .bit_idx(bit_idx),
       .a_in0(a_in0),
       .a_in1(a_in1),
       .b_in0(b_in0),
