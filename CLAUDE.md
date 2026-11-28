@@ -97,6 +97,7 @@
 - 최상위 모듈 이름은 `tt_um_`으로 시작해야 하고, 바꾸면 `info.yaml`, `test/tb.v`도 같이 바꾼다.
 - 현재 최상위 모듈: `tt_um_jameshfj01_tiny_ai_chip` (`src/project.v`). 핀 사용법은 `docs/info.md`에 있다.
 - 칩 소스 파일: `src/project.v`, `src/systolic_2x2.v`, `src/bitserial_seq.v`, `src/mac_bitserial.v`. (`src/mac.v`, `src/mac_serial.v`는 참고용, 칩에 안 들어감)
+- 프로젝트 정리 문서: `PROJECT_SUMMARY.md` (Claude Docs 의 "Tiny AI Chip 프로젝트 정리" 와 같은 내용). 설계나 결과가 바뀌면 같이 고친다.
 - 데모 보드 시험: `demoboard/README.md` (칩이 왔을 때 할 순서), `demoboard/tiny_ai_chip.py` (MicroPython 스크립트). 스크립트는 `test/demoboard`에서 RTL에 연결해 확인한다. 핀 사용법을 바꾸면 이 스크립트도 같이 바꾼다.
 - 새 소스 파일을 추가하면 `info.yaml`의 `source_files`와 `test/Makefile`의 `PROJECT_SOURCES` 둘 다 업데이트한다.
 
