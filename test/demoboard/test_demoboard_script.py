@@ -116,7 +116,7 @@ async def test_script_detects_a_broken_chip(dut):
 
 @cocotb.test()
 async def test_compute_clocks(dut):
-    """수동 클럭에서 start 부터 done 까지의 클럭 수는 544 (계산) 이상, 552 이하."""
+    """수동 클럭에서 start 부터 done 까지의 클럭 수는 576 (계산) 이상, 584 이하."""
     await start(dut)
 
     def measure():
@@ -128,14 +128,35 @@ async def test_compute_clocks(dut):
 
     clocks, C = await bridge(measure)()
     dut._log.info(f"start -> done: {clocks} clocks")
-    assert 544 <= clocks <= 552
+    assert 576 <= clocks <= 584
     assert C == [[19, 22], [43, 50]]
+
+
+@cocotb.test()
+async def test_script_4x4(dut):
+    """스크립트의 4x4 행렬곱 (2x2 블록 + 더하기 모드) 이 RTL 에서 맞게 나온다. 끝값 65536 포함."""
+    await start(dut)
+
+    def run():
+        chip = script.Chip(SimBoard(dut))
+        chip.board.reset()
+        A = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]]
+        B = [[1, 0, 0, 1], [0, 1, 1, 0], [-1, 0, 2, 0], [0, -2, 0, 3]]
+        M = [[-128] * 4 for _ in range(4)]
+        return chip.matmul4(A, B), script.matmul_ref(A, B), chip.matmul4(M, M)
+
+    got, want, worst = await bridge(run)()
+    assert got == want
+    assert worst == [[65536] * 4 for _ in range(4)]
 
 
 @cocotb.test()
 async def test_reference_model_matches_examples(dut):
     """스크립트 안의 정답 계산(파이썬 행렬곱)과 무작위 값 생성기를 확인한다."""
     assert script.matmul_ref([[1, 2], [3, 4]], [[5, 6], [7, 8]]) == [[19, 22], [43, 50]]
+    I4 = [[1 if i == j else 0 for j in range(4)] for i in range(4)]
+    A4 = [[i * 4 + j - 8 for j in range(4)] for i in range(4)]
+    assert script.matmul_ref(A4, I4) == A4
     rng = script.Lcg(2026)
     values = [rng.int8() for _ in range(1000)]
     assert min(values) >= -128 and max(values) <= 127

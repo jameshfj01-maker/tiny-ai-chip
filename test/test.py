@@ -9,12 +9,14 @@
 #   uio_in[3:0] : 주소
 #   uio_in[4]   : write. 0 -> 1 로 올라갈 때 한 번 저장한다.
 #   uio_in[5]   : start. 0 -> 1 로 올라갈 때 계산을 한 번 시작한다.
+#   uio_in[6]   : acc (더하기 모드). start 할 때 1 이면 이전 결과를 지우지 않고 더한다: C = C + A x B.
+#                 큰 행렬을 2x2 블록으로 나눠 계산할 때 쓴다.
 #   uio_out[7]  : done. 계산이 끝나면 1, 다음 start 까지 유지.
 #   uo_out[7:0] : 주소가 가리키는 결과 바이트
 #
 # 쓰기 주소: 0..3 = A00 A01 A10 A11, 4..7 = B00 B01 B10 B11
 # 읽기 주소: {칸 번호(2비트), 바이트 번호(2비트)}
-#   칸 번호 0..3 = C00 C01 C10 C11, 바이트 0 = 하위, 1 = 중간, 2 = 상위(부호 확장), 3 = 항상 0
+#   칸 번호 0..3 = C00 C01 C10 C11, 바이트 0 = [7:0], 1 = [15:8], 2 = [17:16] 부호 확장, 3 = 항상 0
 #
 # write 와 start 는 칩 바깥(예: 데모 보드의 RP2040)에서 오는 신호라서 칩 안에서
 # 2단 동기화를 거친다. 그래서 각 신호를 몇 클럭 동안 유지해 준다.
@@ -27,10 +29,11 @@ from cocotb.triggers import ClockCycles, FallingEdge
 
 WRITE = 1 << 4
 START = 1 << 5
+ACC = 1 << 6
 DONE = 1 << 7
 HOLD = 4          # write/start 를 유지하는 클럭 수 (동기화 2클럭 + 여유)
 DONE_TIMEOUT = 800
-COMPUTE_CLOCKS = 544  # 4 박자 x 136 클럭 (완전 비트 직렬 MAC: 8 줄 x 17 비트)
+COMPUTE_CLOCKS = 576  # 4 박자 x 144 클럭 (완전 비트 직렬 MAC: 8 줄 x 18 비트)
 
 
 def matmul(A, B):
@@ -71,9 +74,9 @@ def done(dut):
     return (int(dut.uio_out.value) & DONE) != 0
 
 
-async def run(dut):
-    """start 를 한 번 올렸다 내리고 done 이 될 때까지 기다린다."""
-    dut.uio_in.value = START
+async def run(dut, accumulate=False):
+    """start 를 한 번 올렸다 내리고 done 이 될 때까지 기다린다. accumulate 면 acc 핀도 같이 1."""
+    dut.uio_in.value = START | (ACC if accumulate else 0)
     await ClockCycles(dut.clk, HOLD)
     dut.uio_in.value = 0
     for _ in range(DONE_TIMEOUT):
@@ -101,10 +104,34 @@ async def read_c(dut):
     return C
 
 
-async def matmul_on_chip(dut, A, B):
+async def matmul_on_chip(dut, A, B, accumulate=False):
     await load(dut, A, B)
-    await run(dut)
+    await run(dut, accumulate)
     return await read_c(dut)
+
+
+def block(M, bi, bj):
+    """4x4 행렬 M 의 (bi, bj) 번째 2x2 블록."""
+    return [[M[2 * bi + i][2 * bj + j] for j in range(2)] for i in range(2)]
+
+
+def matmul_ref(A, B):
+    n = len(A)
+    return [[sum(A[i][k] * B[k][j] for k in range(n)) for j in range(n)] for i in range(n)]
+
+
+async def matmul4_on_chip(dut, A, B):
+    """4x4 행렬곱을 2x2 블록으로 나눠 계산한다.
+    C 의 블록 (bi, bj) = A(bi,0) x B(0,bj) + A(bi,1) x B(1,bj): 첫 곱은 보통 start, 둘째는 acc 모드."""
+    C = [[0] * 4 for _ in range(4)]
+    for bi in range(2):
+        for bj in range(2):
+            await matmul_on_chip(dut, block(A, bi, 0), block(B, 0, bj))
+            part = await matmul_on_chip(dut, block(A, bi, 1), block(B, 1, bj), accumulate=True)
+            for i in range(2):
+                for j in range(2):
+                    C[2 * bi + i][2 * bj + j] = part[i][j]
+    return C
 
 
 @cocotb.test()
@@ -191,6 +218,49 @@ async def test_partial_reload(dut):
     A[0][0] = -1
     await run(dut)
     assert await read_c(dut) == matmul(A, B)
+
+
+@cocotb.test()
+async def test_accumulate_mode(dut):
+    """acc 핀을 1 로 하고 start 하면 이전 결과에 더한다. acc 핀이 0 이면 다시 새로 계산한다."""
+    await start_chip(dut)
+    A1, B1 = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    A2, B2 = [[-9, 10], [11, -12]], [[13, 14], [-15, 16]]
+    assert await matmul_on_chip(dut, A1, B1) == matmul(A1, B1)
+    got = await matmul_on_chip(dut, A2, B2, accumulate=True)
+    assert got == [[matmul(A1, B1)[i][j] + matmul(A2, B2)[i][j] for j in range(2)] for i in range(2)]
+    assert await matmul_on_chip(dut, A1, B1) == matmul(A1, B1)
+
+
+@cocotb.test()
+async def test_4x4_example(dut):
+    """4x4 행렬곱을 블록으로 나눠서 계산한다."""
+    await start_chip(dut)
+    A = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]]
+    B = [[1, 0, 0, 1], [0, 1, 1, 0], [-1, 0, 2, 0], [0, -2, 0, 3]]
+    assert await matmul4_on_chip(dut, A, B) == matmul_ref(A, B)
+
+
+@cocotb.test()
+async def test_4x4_worst_case(dut):
+    """끝값 4x4: 칸마다 (-128) x (-128) x 4 = 65536. 18비트라서 정확히 읽힌다."""
+    await start_chip(dut)
+    M = [[-128] * 4 for _ in range(4)]
+    assert await matmul4_on_chip(dut, M, M) == [[65536] * 4 for _ in range(4)]
+    P = [[127] * 4 for _ in range(4)]
+    assert await matmul4_on_chip(dut, M, P) == [[-65024] * 4 for _ in range(4)]
+
+
+@cocotb.test()
+async def test_4x4_random(dut):
+    """무작위 4x4 행렬 3 쌍."""
+    await start_chip(dut)
+    rng = random.Random(44)
+    for n in range(3):
+        A = [[rng.randint(-128, 127) for _ in range(4)] for _ in range(4)]
+        B = [[rng.randint(-128, 127) for _ in range(4)] for _ in range(4)]
+        got = await matmul4_on_chip(dut, A, B)
+        assert got == matmul_ref(A, B), f"#{n}: A={A} B={B} got {got}"
 
 
 @cocotb.test()

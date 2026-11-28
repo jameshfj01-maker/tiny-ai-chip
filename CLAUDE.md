@@ -84,6 +84,11 @@
   결론: 제출 후보는 이 설계와 1x1 타일 (1타일, 1x2 의 절반 비용). 대가는 계산 시간 (36 클럭에서 548 클럭, 50MHz 에서 약 11us). 1x2 버전은 커밋 c011723.
 - 2026-11-27 결정 (사용자): 제출은 1x1 타일, 완전 비트 직렬 버전으로 한다. 기준 커밋은 5344e8e (그 뒤에 기록만 바꾼 커밋은 회로와 같다).
   다음 셔틀에서 다시 하드닝할 때도 `info.yaml` 의 `tiles: "1x1"` 을 유지한다. 1x2 버전 (커밋 c011723) 은 되돌아갈 때만 쓴다.
+- 2026-11-28: 사용자 요청으로 큰 행렬 계산 모드 추가. `uio[6]` = ACC 핀: start 할 때 1 이면 결과를 지우지 않고 더한다 (C = C + A x B).
+  4x4 행렬곱 = 2x2 블록으로 나눠, 결과 블록마다 보통 start 1 번 + 더하기 start 1 번 (모두 8 번). 데모 보드 스크립트 `Chip.matmul4` 가 이렇게 한다.
+  acc 를 17비트에서 18비트로 늘렸다: 4x4 의 한 칸은 곱 4 개의 합이라 끝값 (-128)x(-128)x4 = 65536 은 17비트에 안 들어간다. 18비트면 4x4 까지 항상 정확하고, 더 큰 행렬은 끝값이 많으면 넘칠 수 있다.
+  배열에 `restart` 입력 추가 (순서 지휘자와 이동 레지스터만 처음으로, 결과는 그대로). 계산 시간 576 클럭 (start 부터 done 까지 약 580).
+  Yosys 일반 게이트 670개에서 687개 (플립플롭 186개에서 190개). 1x1 사용률은 약 81~82% 로 예상, 하드닝 결과로 확인한다.
 - `viewer` 작업은 GitHub Pages가 꺼져 있어서 실패한다. 칩 3D 미리보기용이고 제출에는 필요 없다. 켜려면 저장소 Settings, Pages, Source를 "GitHub Actions"로 바꾼다.
 
 ## 저장소 정보 (템플릿에서 확인한 사실)
@@ -96,6 +101,7 @@
 - 핀 제한: 입력 8개(`ui_in`), 출력 8개(`uo_out`), 양방향 8개(`uio_*`). 8비트 데이터를 어떻게 넣고 뺄지 설계할 때 이 제한이 핵심 제약이다.
 - 최상위 모듈 이름은 `tt_um_`으로 시작해야 하고, 바꾸면 `info.yaml`, `test/tb.v`도 같이 바꾼다.
 - 현재 최상위 모듈: `tt_um_jameshfj01_tiny_ai_chip` (`src/project.v`). 핀 사용법은 `docs/info.md`에 있다.
+- 핀: `ui_in` 데이터, `uio[3:0]` 주소, `uio[4]` write, `uio[5]` start, `uio[6]` ACC (더하기 모드), `uio[7]` done (칩 출력), `uo_out` 결과 바이트.
 - 칩 소스 파일: `src/project.v`, `src/systolic_2x2.v`, `src/bitserial_seq.v`, `src/mac_bitserial.v`. (`src/mac.v`, `src/mac_serial.v`는 참고용, 칩에 안 들어감)
 - 프로젝트 정리 문서: `PROJECT_SUMMARY.md` (Claude Docs 의 "Tiny AI Chip 프로젝트 정리" 와 같은 내용). 설계나 결과가 바뀌면 같이 고친다.
 - 데모 보드 시험: `demoboard/README.md` (칩이 왔을 때 할 순서), `demoboard/tiny_ai_chip.py` (MicroPython 스크립트). 스크립트는 `test/demoboard`에서 RTL에 연결해 확인한다. 핀 사용법을 바꾸면 이 스크립트도 같이 바꾼다.

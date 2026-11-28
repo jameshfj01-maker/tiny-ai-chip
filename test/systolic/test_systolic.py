@@ -24,11 +24,16 @@
 #
 #   PE(i,j) 는 시각 t = i + j + k 에 k 번째 곱을 받는다. 그래서 4 박자면 끝난다.
 #
-# 박자(beat): 각 PE 는 완전 비트 직렬 MAC 이라서 곱 하나에 8 줄 x 17 비트 = 136 클럭이 걸린다.
-#   한 박자 = en 136 클럭. 그동안 a_in, b_in 을 그대로 둔다. 순서는 배열 안의 지휘자가 센다.
+# 박자(beat): 각 PE 는 완전 비트 직렬 MAC 이라서 곱 하나에 8 줄 x 18 비트 = 144 클럭이 걸린다.
+#   한 박자 = en 144 클럭. 그동안 a_in, b_in 을 그대로 둔다. 순서는 배열 안의 지휘자가 센다.
 #   이동 레지스터(a, b 를 이웃 PE 로 넘기는 것)는 박자의 마지막 클럭에만 움직이고,
 #   그 클럭에 beat_end 출력이 1 이 된다.
-#   그래서 행렬곱 한 번 = 4 박자 = 544 클럭.
+#   그래서 행렬곱 한 번 = 4 박자 = 576 클럭.
+#
+# 새로 시작하는 방법 두 가지:
+#   clr     = 결과(acc) 까지 모두 0 으로. C = A x B.
+#   restart = 순서와 이동 레지스터만 처음으로, 결과는 그대로. C = (이전 C) + A x B.
+#             큰 행렬을 2x2 블록으로 나눠 계산할 때 블록 곱을 더해 가는 데 쓴다.
 #
 # 타이밍 약속은 mac 테스트와 같다: 내려가는 엣지에서 입력을 바꾸고 다음
 # 내려가는 엣지에서 결과를 읽는다.
@@ -41,8 +46,8 @@ from cocotb.triggers import ClockCycles, FallingEdge, Timer
 
 N = 2          # 행렬 크기
 CYCLES = 4     # 행렬곱 한 번에 필요한 박자 수 = N + 2*(N-1)
-BITS = 8 * 17  # 한 박자의 클럭 수 (완전 비트 직렬 MAC 이 곱 하나에 쓰는 클럭 = 136)
-ACC_W = 17
+BITS = 8 * 18  # 한 박자의 클럭 수 (완전 비트 직렬 MAC 이 곱 하나에 쓰는 클럭 = 144)
+ACC_W = 18
 
 
 def matmul(A, B):
@@ -71,7 +76,7 @@ def read_c(dut):
 
 async def start(dut):
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
-    for name in ("en", "clr", "a_in0", "a_in1", "b_in0", "b_in1"):
+    for name in ("en", "clr", "restart", "a_in0", "a_in1", "b_in0", "b_in1"):
         getattr(dut, name).value = 0
     dut.rst_n.value = 0
     await ClockCycles(dut.clk, 3)
@@ -79,7 +84,7 @@ async def start(dut):
     dut.rst_n.value = 1
 
 
-async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0):
+async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0, restart=0):
     """클럭 한 번."""
     dut.a_in0.value = a0
     dut.a_in1.value = a1
@@ -87,6 +92,7 @@ async def step(dut, a0=0, a1=0, b0=0, b1=0, en=1, clr=0):
     dut.b_in1.value = b1
     dut.en.value = en
     dut.clr.value = clr
+    dut.restart.value = restart
     await FallingEdge(dut.clk)
 
 
@@ -96,9 +102,12 @@ async def beat(dut, a0, a1, b0, b1):
         await step(dut, a0, a1, b0, b1, en=1)
 
 
-async def run_matmul(dut, A, B):
-    """clr 한 번 후 4 박자 동안 일정대로 넣고, 결과 C 를 돌려준다."""
-    await step(dut, en=0, clr=1)
+async def run_matmul(dut, A, B, accumulate=False):
+    """clr (또는 accumulate 면 restart) 한 번 후 4 박자 동안 일정대로 넣고, 결과 C 를 돌려준다."""
+    if accumulate:
+        await step(dut, en=0, restart=1)
+    else:
+        await step(dut, en=0, clr=1)
     for t in range(CYCLES):
         await beat(dut, *schedule(A, B, t))
     await step(dut, en=0)   # 한 클럭 쉬어도 결과가 그대로인지도 함께 본다
@@ -192,6 +201,39 @@ async def test_clr_mid_matmul(dut):
         await step(dut, *schedule(A1, B1, 1), en=1)
     A2, B2 = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
     assert await run_matmul(dut, A2, B2) == [[19, 22], [43, 50]]
+
+
+@cocotb.test()
+async def test_accumulate(dut):
+    """restart 로 시작하면 이전 결과에 더한다: C = A1 x B1 + A2 x B2."""
+    await start(dut)
+    A1, B1 = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    A2, B2 = [[-9, 10], [11, -12]], [[13, 14], [-15, 16]]
+    assert await run_matmul(dut, A1, B1) == matmul(A1, B1)
+    got = await run_matmul(dut, A2, B2, accumulate=True)
+    want = [[matmul(A1, B1)[i][j] + matmul(A2, B2)[i][j] for j in range(N)] for i in range(N)]
+    assert got == want, f"got {got} want {want}"
+
+
+@cocotb.test()
+async def test_accumulate_4x4_worst_case(dut):
+    """4x4 행렬곱의 한 블록 = 2x2 곱 2 개의 합. 끝값이면 칸마다 65536 (18비트에서만 정확)."""
+    await start(dut)
+    M = [[-128, -128], [-128, -128]]
+    await run_matmul(dut, M, M)
+    assert await run_matmul(dut, M, M, accumulate=True) == [[65536] * 2] * 2
+
+
+@cocotb.test()
+async def test_restart_clears_pass_registers(dut):
+    """restart 는 결과는 두지만 이동 레지스터는 지운다. 남은 값이 다음 계산에 섞이면 안 된다.
+    한 박자 동안 a_in1 = 7, b_in1 = 9 만 넣으면 acc 는 그대로 0 이고 a_pass1, b_pass1 에만 값이 남는다."""
+    await start(dut)
+    await step(dut, en=0, clr=1)
+    await beat(dut, 0, 7, 0, 9)
+    assert read_c(dut) == [[0, 0], [0, 0]]
+    A, B = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    assert await run_matmul(dut, A, B, accumulate=True) == [[19, 22], [43, 50]]
 
 
 @cocotb.test()

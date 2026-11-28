@@ -8,8 +8,8 @@
  * 부호 비트 줄 (i = 7) 은 빼기다. MAC 은 acc 를 한 비트씩 (j = 0..ACC_W-1) 돌리면서 더하므로
  * 지휘자는 두 카운터를 센다:
  *
- *   j : 지금 acc 의 몇 번째 비트를 더하는지 (0..16)   한 바퀴 = 17 클럭
- *   i : 지금 몇 번째 줄인지 (0..7)                    곱 하나 = 8 바퀴 = 136 클럭
+ *   j : 지금 acc 의 몇 번째 비트를 더하는지 (0..17)   한 바퀴 = 18 클럭
+ *   i : 지금 몇 번째 줄인지 (0..7)                    곱 하나 = 8 바퀴 = 144 클럭
  *
  * 그리고 MAC 들에게 알려 준다 ("a << i" 의 j 번째 비트가 a 의 몇 번째 비트인지):
  *
@@ -26,7 +26,7 @@
 `default_nettype none
 
 module bitserial_seq #(
-    parameter ACC_W = 17
+    parameter ACC_W = 18
 ) (
     input  wire       clk,
     input  wire       rst_n,

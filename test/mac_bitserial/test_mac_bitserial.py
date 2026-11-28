@@ -2,12 +2,12 @@
 #
 # mac_bitserial (+ bitserial_seq) 테스트: 완전 비트 직렬 MAC.
 #
-# acc 는 17비트 시프트 레지스터다. 한 클럭에 acc 의 한 비트에만 1비트 전가산기로 더한다.
-#   - acc 를 한 바퀴(17 클럭) 돌리면 세로 곱셈의 한 줄 (b[i] 가 1 이면 a << i) 이 더해진다.
-#   - i = 0..7 을 다 돌면 (8 x 17 = 136 클럭) acc 에 a * b 가 더해진다.
+# acc 는 18비트 시프트 레지스터다. 한 클럭에 acc 의 한 비트에만 1비트 전가산기로 더한다.
+#   - acc 를 한 바퀴(18 클럭) 돌리면 세로 곱셈의 한 줄 (b[i] 가 1 이면 a << i) 이 더해진다.
+#   - i = 0..7 을 다 돌면 (8 x 18 = 144 클럭) acc 에 a * b 가 더해진다.
 #   - b 의 부호 비트(i = 7)는 무게가 -128 이라서 그 줄은 빼기 (2의 보수: 뒤집고 +1) 를 한다.
 #   - acc 는 한 바퀴가 끝날 때마다만 제자리에 있다. 그래서 값은 바퀴 끝에서 읽는다.
-#   - 17비트를 넘으면 2의 보수로 감긴다.
+#   - 18비트를 넘으면 2의 보수로 감긴다. 18비트면 곱 4 개의 합 (4x4 행렬곱의 한 칸) 이 끝값에서도 정확하다.
 #   - rst_n = 0 이나 clr = 1 이면 acc 와 순서 카운터가 0 이 된다. en = 0 이면 다 멈춘다.
 #
 # 타이밍 약속: 내려가는 엣지에서 입력을 바꾸고 다음 내려가는 엣지에서 읽는다.
@@ -19,9 +19,9 @@ from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge
 
 DATA_W = 8
-ACC_W = 17
-PASS = ACC_W              # acc 한 바퀴 = 17 클럭
-PRODUCT = DATA_W * PASS   # 곱 하나 = 136 클럭
+ACC_W = 18
+PASS = ACC_W              # acc 한 바퀴 = 18 클럭
+PRODUCT = DATA_W * PASS   # 곱 하나 = 144 클럭
 
 
 def wrap(value, bits=ACC_W):
@@ -63,7 +63,7 @@ def acc(dut):
 
 
 async def mac(dut, a, b):
-    """en 136 클럭: acc += a * b. 마지막 클럭에만 last = 1 이어야 한다."""
+    """en 144 클럭: acc += a * b. 마지막 클럭에만 last = 1 이어야 한다."""
     for k in range(PRODUCT):
         dut.a.value = a
         dut.b.value = b
@@ -98,14 +98,14 @@ async def test_reset(dut):
 
 @cocotb.test()
 async def test_single_multiply(dut):
-    """7 * 6 = 42, 136 클럭."""
+    """7 * 6 = 42, 144 클럭."""
     await start(dut)
     assert await mac(dut, 7, 6) == 42
 
 
 @cocotb.test()
 async def test_last_pulse(dut):
-    """last 는 곱 하나에 딱 한 번, 136 번째 클럭에 1 이다."""
+    """last 는 곱 하나에 딱 한 번, 144 번째 클럭에 1 이다."""
     await start(dut)
     got, lasts = await mac_checking_last(dut, 3, 5)
     assert got == 15
@@ -117,7 +117,7 @@ async def test_last_pulse(dut):
 
 @cocotb.test()
 async def test_partial_rows(dut):
-    """acc 가 한 바퀴(17 클럭) 돌 때마다 세로 곱셈이 한 줄씩 더해진다. 음수 b 의 마지막 줄은 빼기."""
+    """acc 가 한 바퀴(18 클럭) 돌 때마다 세로 곱셈이 한 줄씩 더해진다. 음수 b 의 마지막 줄은 빼기."""
     await start(dut)
     for a, b in [(13, 11), (-100, -77), (127, -128), (-128, -1)]:
         await step(dut, en=0, clr=1)
@@ -143,8 +143,21 @@ async def test_signed(dut):
 
 
 @cocotb.test()
+async def test_four_products_worst_case(dut):
+    """4x4 행렬곱 한 칸은 곱 4 개의 합이다. 가장 큰 경우 65536 (17비트에는 안 들어감) 도 18비트에서 정확하다."""
+    await start(dut)
+    for _ in range(4):
+        got = await mac(dut, -128, -128)
+    assert got == 65536
+    await step(dut, en=0, clr=1)
+    for _ in range(4):
+        got = await mac(dut, -128, 127)
+    assert got == -65024
+
+
+@cocotb.test()
 async def test_two_products(dut):
-    """2x2 행렬곱 한 칸은 곱 2 개의 합이다. 가장 큰 경우 32768 과 가장 작은 경우 -32512 도 17비트에 들어간다."""
+    """2x2 행렬곱 한 칸은 곱 2 개의 합이다. 가장 큰 경우 32768 과 가장 작은 경우 -32512."""
     await start(dut)
     await mac(dut, -128, -128)
     assert await mac(dut, -128, -128) == 32768
@@ -199,11 +212,11 @@ async def test_reset_mid_product(dut):
 
 @cocotb.test()
 async def test_overflow_wraps(dut):
-    """17비트를 넘으면 감긴다: 16384 * 4 = 65536 -> -65536."""
+    """18비트를 넘으면 감긴다: 16384 * 8 = 131072 -> -131072."""
     await start(dut)
-    for _ in range(4):
+    for _ in range(8):
         got = await mac(dut, -128, -128)
-    assert got == wrap(16384 * 4) == -65536
+    assert got == wrap(16384 * 8) == -131072
 
 
 @cocotb.test()

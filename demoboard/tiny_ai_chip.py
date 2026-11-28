@@ -21,6 +21,7 @@ PROJECT_NAME = "tt_um_jameshfj01_tiny_ai_chip"
 
 WRITE = 0x10            # uio[4]
 START = 0x20            # uio[5]
+ACC = 0x40              # uio[6]: start 할 때 1 이면 더하기 모드 (C = C + A x B)
 DONE = 0x80             # uio[7] (칩이 내보내는 핀)
 
 # 데모 보드(Pico)가 내보낼 uio 핀: uio[6:0]. uio[7] 은 칩이 내보내므로 절대 Pico 가 내보내면 안 된다.
@@ -28,13 +29,19 @@ UIO_PICO_OUTPUTS = 0x7F
 UIO_CHIP_OUTPUTS = 0x80  # 칩의 uio_oe 가 이 값이어야 한다
 
 HOLD_CLOCKS = 4          # write / start 를 유지하는 클럭 수 (칩 안 동기화 2 클럭 + 여유)
-COMPUTE_CLOCKS = 544     # 계산 클럭 수: 4 박자 x 136 클럭 (완전 비트 직렬 MAC)
-DONE_TIMEOUT = 1000      # done 을 기다리는 최대 횟수 (정상은 약 548 클럭)
+COMPUTE_CLOCKS = 576     # 계산 클럭 수: 4 박자 x 144 클럭 (완전 비트 직렬 MAC)
+DONE_TIMEOUT = 1000      # done 을 기다리는 최대 횟수 (정상은 약 580 클럭)
 
 
 def matmul_ref(A, B):
-    """정답: 파이썬으로 계산한 2x2 행렬곱."""
-    return [[A[i][0] * B[0][j] + A[i][1] * B[1][j] for j in range(2)] for i in range(2)]
+    """정답: 파이썬으로 계산한 n x n 행렬곱."""
+    n = len(A)
+    return [[sum(A[i][k] * B[k][j] for k in range(n)) for j in range(n)] for i in range(n)]
+
+
+def block(M, bi, bj):
+    """4x4 행렬 M 의 (bi, bj) 번째 2x2 블록."""
+    return [[M[2 * bi + i][2 * bj + j] for j in range(2)] for i in range(2)]
 
 
 class Lcg:
@@ -75,10 +82,11 @@ class Chip:
     def done(self):
         return (self.board.get_uio() & DONE) != 0
 
-    def run(self):
-        """start 를 한 번 누르고 done 을 기다린다. start 부터 done 까지 기다린 클럭 수를 돌려준다."""
+    def run(self, accumulate=False):
+        """start 를 한 번 누르고 done 을 기다린다. start 부터 done 까지 기다린 클럭 수를 돌려준다.
+        accumulate 면 acc 핀(uio[6])도 같이 1 로 해서 이전 결과에 더한다."""
         b = self.board
-        b.set_uio(START)
+        b.set_uio(START | (ACC if accumulate else 0))
         clocks = 0
         for _ in range(self.hold):
             b.wait_clocks(1)
@@ -109,10 +117,23 @@ class Chip:
             C[cell // 2][cell % 2] = raw
         return C
 
-    def matmul(self, A, B):
+    def matmul(self, A, B, accumulate=False):
         self.load(A, B)
-        self.run()
+        self.run(accumulate)
         return self.read_c()
+
+    def matmul4(self, A, B):
+        """4x4 행렬곱을 2x2 블록으로 나눠 계산한다.
+        C 의 블록 (bi, bj) = A(bi,0) x B(0,bj) + A(bi,1) x B(1,bj): 첫 곱은 보통, 둘째는 더하기 모드."""
+        C = [[0] * 4 for _ in range(4)]
+        for bi in range(2):
+            for bj in range(2):
+                self.matmul(block(A, bi, 0), block(B, 0, bj))
+                part = self.matmul(block(A, bi, 1), block(B, 1, bj), accumulate=True)
+                for i in range(2):
+                    for j in range(2):
+                        C[2 * bi + i][2 * bj + j] = part[i][j]
+        return C
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +209,25 @@ def run_all(chip, log=print, n_random=20, check_clocks=None):
     got = chip.read_c()
     check("A00 만 다시 쓰기", got == matmul_ref(A, B), "got %s" % got)
 
-    # 6. 무작위
+    # 6. 더하기 모드: C = A1 x B1 + A2 x B2, 그다음 보통 start 는 다시 새로 계산
+    A1, B1 = [[1, 2], [3, 4]], [[5, 6], [7, 8]]
+    A2, B2 = [[-9, 10], [11, -12]], [[13, 14], [-15, 16]]
+    chip.matmul(A1, B1)
+    got = chip.matmul(A2, B2, accumulate=True)
+    want = [[matmul_ref(A1, B1)[i][j] + matmul_ref(A2, B2)[i][j] for j in range(2)] for i in range(2)]
+    again = chip.matmul(A1, B1)
+    check("더하기 모드", got == want and again == matmul_ref(A1, B1), "got %s then %s" % (got, again))
+
+    # 7. 4x4 행렬곱 (2x2 블록 8 번)
+    A = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]]
+    B = [[1, 0, 0, 1], [0, 1, 1, 0], [-1, 0, 2, 0], [0, -2, 0, 3]]
+    got = chip.matmul4(A, B)
+    check("4x4 예시", got == matmul_ref(A, B), "got %s" % got)
+    M4 = [[-128] * 4 for _ in range(4)]
+    got = chip.matmul4(M4, M4)
+    check("4x4 끝값 (칸마다 65536)", got == [[65536] * 4 for _ in range(4)], "got %s" % got)
+
+    # 8. 무작위
     rng = Lcg(2026)
     bad = 0
     for n in range(n_random):
@@ -199,6 +238,15 @@ def run_all(chip, log=print, n_random=20, check_clocks=None):
             bad += 1
             log("      #%d A=%s B=%s got %s want %s" % (n, A, B, got, matmul_ref(A, B)))
     check("무작위 %d 쌍" % n_random, bad == 0, "%d 개 틀림" % bad)
+
+    # 9. 무작위 4x4
+    bad = 0
+    for n in range(2):
+        A = [[rng.int8() for _ in range(4)] for _ in range(4)]
+        B = [[rng.int8() for _ in range(4)] for _ in range(4)]
+        if chip.matmul4(A, B) != matmul_ref(A, B):
+            bad += 1
+    check("무작위 4x4 2 쌍", bad == 0, "%d 개 틀림" % bad)
 
     log("결과: %d / %d 통과" % (result["passed"], result["total"]))
     return result

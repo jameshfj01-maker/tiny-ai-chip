@@ -10,6 +10,7 @@
  *   uio_in[4] ──► write ─[동기화]┘                │
  *                                                 v
  *   uio_in[5] ──► start ─[동기화]──► [ 지휘자(상태 기계) ] ──► 비스듬히 밀어 넣기
+ *   uio_in[6] ──► acc (더하기 모드) ────────┘
  *                                                 │                 │
  *   uio_out[7] ◄── done ◄─────────────────────────┘                 v
  *                                       [ systolic_2x2 (완전 비트 직렬 MAC 4개) ]
@@ -19,14 +20,18 @@
  * 쓰기 주소 : 0..3 = A00 A01 A10 A11, 4..7 = B00 B01 B10 B11 (8..15 는 무시)
  * 읽기 주소 : {칸 번호 2비트, 바이트 번호 2비트}
  *             칸 0..3 = C00 C01 C10 C11
- *             바이트 0 = [7:0], 1 = [15:8], 2 = [16] 을 부호 확장, 3 = 0
+ *             바이트 0 = [7:0], 1 = [15:8], 2 = [17:16] 을 부호 확장, 3 = 0
+ *
+ * 더하기 모드: start 가 들어오는 순간 acc (uio_in[6]) 가 1 이면 결과를 지우지 않고
+ * 새 곱을 더한다 (C = C + A x B). 큰 행렬을 2x2 블록으로 나눠 계산할 때 쓴다:
+ * 4x4 행렬곱의 블록 하나 = 2x2 곱 2 개의 합. 결과가 18비트라 4x4 까지는 끝값에서도 정확하다.
  *
  * write, start 는 칩 바깥에서 클럭과 상관없이 바뀌는 신호라서 플립플롭 2개로
  * 동기화한 뒤, 0 -> 1 로 바뀌는 순간(상승 엣지)에 한 번만 동작한다.
  * 계산 중(busy)에는 write 와 start 를 무시한다.
  *
- * 계산 시간: 4 박자 x 136 클럭 = 544 클럭 (완전 비트 직렬 MAC 이 곱 하나에 8 줄 x 17 비트를 쓴다).
- * 50MHz 에서 약 11 마이크로초.
+ * 계산 시간: 4 박자 x 144 클럭 = 576 클럭 (완전 비트 직렬 MAC 이 곱 하나에 8 줄 x 18 비트를 쓴다).
+ * 50MHz 에서 약 12 마이크로초.
  */
 
 `default_nettype none
@@ -42,11 +47,12 @@ module tt_um_jameshfj01_tiny_ai_chip (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-  localparam ACC_W = 17;
+  localparam ACC_W = 18;
 
   wire [3:0] addr  = uio_in[3:0];
   wire       write = uio_in[4];
   wire       start = uio_in[5];
+  wire       acc_mode = uio_in[6];  // start 할 때 1 이면 더하기 모드 (start 와 함께 미리 1 로 두고 유지한다)
 
   // ---------------------------------------------------------------
   // 1. write, start 동기화 + 상승 엣지 검출
@@ -144,7 +150,8 @@ module tt_um_jameshfj01_tiny_ai_chip (
       .clk  (clk),
       .rst_n(rst_n),
       .en   (busy),
-      .clr  (go),
+      .clr  (go & ~acc_mode),  // 보통 start: 결과까지 지우고 새로
+      .restart(go & acc_mode), // 더하기 모드 start: 결과는 두고 새로
       .a_in0(a_in0),
       .a_in1(a_in1),
       .b_in0(b_in0),
@@ -174,7 +181,7 @@ module tt_um_jameshfj01_tiny_ai_chip (
     case (addr[1:0])
       2'd0: read_byte = sel_c[7:0];
       2'd1: read_byte = sel_c[15:8];
-      2'd2: read_byte = {{7{sel_c[16]}}, sel_c[16]};
+      2'd2: read_byte = {{6{sel_c[17]}}, sel_c[17:16]};
       default: read_byte = 8'd0;
     endcase
   end
@@ -184,6 +191,6 @@ module tt_um_jameshfj01_tiny_ai_chip (
   assign uio_oe  = 8'b1000_0000;  // uio[7] 만 출력 (done), 나머지는 입력
 
   // 쓰지 않는 입력 (경고 방지)
-  wire _unused = &{ena, uio_in[7:6], 1'b0};
+  wire _unused = &{ena, uio_in[7], 1'b0};
 
 endmodule

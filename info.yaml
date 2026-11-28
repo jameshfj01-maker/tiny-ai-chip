@@ -52,7 +52,7 @@ pinout:
   uio[3]: "ADDR[3]"
   uio[4]: "WRITE"
   uio[5]: "START"
-  uio[6]: ""
+  uio[6]: "ACC"
   uio[7]: "DONE"
 
 # Do not change!

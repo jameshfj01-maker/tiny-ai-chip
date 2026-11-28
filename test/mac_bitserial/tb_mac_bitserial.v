@@ -10,18 +10,18 @@ module tb_mac_bitserial (
     input  wire               clr,
     input  wire signed [7:0]  a,
     input  wire signed [7:0]  b,
-    output wire signed [16:0] acc,
+    output wire signed [17:0] acc,
     output wire               last   // 곱 하나의 마지막 클럭 (이 클럭이 끝나면 acc 에 곱이 다 더해진다)
 );
   wire [2:0] a_idx, b_idx;
   wire       a_zero, neg, first;
 
-  bitserial_seq #(.ACC_W(17)) seq (
+  bitserial_seq #(.ACC_W(18)) seq (
       .clk(clk), .rst_n(rst_n), .en(en), .clr(clr),
       .a_idx(a_idx), .a_zero(a_zero), .b_idx(b_idx), .neg(neg), .first(first), .last(last)
   );
 
-  mac_bitserial #(.ACC_W(17)) mac (
+  mac_bitserial #(.ACC_W(18)) mac (
       .clk(clk), .rst_n(rst_n), .en(en), .clr(clr), .a(a), .b(b),
       .a_idx(a_idx), .a_zero(a_zero), .b_idx(b_idx), .neg(neg), .first(first),
       .acc(acc)
